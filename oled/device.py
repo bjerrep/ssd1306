@@ -64,7 +64,7 @@ class I2C(object):
         than this it is sent in chunks.
         """
         wiringpi2.wiringPiI2CWriteReg8(self._fd, self._address, self._data_mode)
-        for i in xrange(0, len(data), 32):
+        for i in range(0, len(data), 32):
             v = data[i:i+32]
             buf = struct.pack('{}B'.format(len(v)), *v)
             wiringpi2.wiringPiI2CWrite(self._fd, buf)
@@ -75,7 +75,7 @@ class I2C(object):
 class SPI(object):
     """Wrap an SPI serial interface.
     """
-    def __init__(self, port=0, spi_bus_speed_hz=32000000, gpio_command_data_select=24, gpio_reset=25):
+    def __init__(self, port=0, spi_bus_speed_hz=400000000, gpio_command_data_select=24, gpio_reset=25):
         self._port = port
         self._gpio_command_data_select = gpio_command_data_select
         self._gpio_reset = gpio_reset
@@ -92,10 +92,8 @@ class SPI(object):
 
     def data(self, data):
         wiringpi2.digitalWrite(self._gpio_command_data_select, 1)
-        for i in xrange(0, len(data), 32):
-            v = data[i:i+32]
-            buf = struct.pack('{}B'.format(len(v)), *v)
-            wiringpi2.wiringPiSPIDataRW(self._port, buf)
+        buf = struct.pack('{}B'.format(len(data)), *data)
+        wiringpi2.wiringPiSPIDataRW(self._port, buf)
 
     def reset(self):
         wiringpi2.digitalWrite(self._gpio_reset, 0)
@@ -142,14 +140,14 @@ class sh1106(object):
         page = 0xB0
         pix = list(image.getdata())
         step = self.width * 8
-        for y in xrange(0, self.pages * step, step):
+        for y in range(0, int(self.pages * step), step):
             # move to given page, then reset the column address
             self._serial_interface.command(page, 0x02, 0x10)
             page += 1
             buf = []
-            for x in xrange(self.width):
+            for x in range(self.width):
                 byte = 0
-                for n in xrange(0, step, self.width):
+                for n in range(0, step, self.width):
                     byte |= (pix[x + y + n] & 0x01) << 8
                     byte >>= 1
                 buf.append(byte)
@@ -198,11 +196,11 @@ class ssd1306(object):
         pix = list(image.getdata())
         step = self.width * 8
         buf = []
-        for y in xrange(0, self.pages * step, step):
+        for y in range(0, self.pages * step, step):
             i = y + self.width-1
             while i >= y:
                 byte = 0
-                for n in xrange(0, step, self.width):
+                for n in range(0, step, self.width):
                     byte |= (pix[i + n] & 0x01) << 8
                     byte >>= 1
 
