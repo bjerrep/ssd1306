@@ -122,12 +122,12 @@ class ThreadedPoster(Poster):
         return self.terminated
 
     def _activate(self):
-        self.thread_terminate = False
+        self.terminated = False
         self.thread = threading.Thread(target=self.run_method)
         self.thread.start()
 
     def _deactivate(self):
-        self.thread_terminate = True
+        self.terminated = True
 
     def new_image_is_ready(self):
         self.redraw_lock.release()
@@ -213,16 +213,15 @@ class Sequenser(threading.Thread):
         while not self.terminated:
             # be responsive to e.g. a terminate from a ctrl-c
             # keyboard interrupt
-            if self.poster_display_time > 1:
-                sleep_time = self.poster_display_time
-                while sleep_time > 0.0 and not self.terminated:
-                    time.sleep(0.1)
-                    sleep_time -= 0.1
-            else:
-                time.sleep(self.poster_display_time)
+            sleep_total = 0.0
+            while (sleep_total < self.poster_display_time and
+                   not self.terminated):
+                sleep_total += 0.1
+                time.sleep(0.1)
 
             pixels = self.active_posters[0].width
             target = time.time()
+            catch_up = 0
 
             while pixels > 0 and not self.terminated:
                 target += self.sleep_per_step
@@ -238,6 +237,8 @@ class Sequenser(threading.Thread):
                 with self.offset_redraw_lock:
                     self.offset += step
                     self.redraw_lock.release()
+             # if catch_up < -self.sleep_per_step:
+             #     print("missing %.3f" % catch_up)
 
     def run(self):
         prev_offset = -1
@@ -251,5 +252,5 @@ class Sequenser(threading.Thread):
                 if self.destination_file:
                     image.save(self.destination_file)
                 else:
-                    device.display(image)
+                    device.display_v2(image)
                 time.sleep(0.001)

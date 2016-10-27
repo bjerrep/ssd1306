@@ -75,7 +75,7 @@ class I2C(object):
 class SPI(object):
     """Wrap an SPI serial interface.
     """
-    def __init__(self, port=0, spi_bus_speed_hz=400000000, gpio_command_data_select=24, gpio_reset=25):
+    def __init__(self, port=0, spi_bus_speed_hz=32000000, gpio_command_data_select=24, gpio_reset=25):
         self._port = port
         self._gpio_command_data_select = gpio_command_data_select
         self._gpio_reset = gpio_reset
@@ -94,7 +94,7 @@ class SPI(object):
         wiringpi2.digitalWrite(self._gpio_command_data_select, 1)
         buf = struct.pack('{}B'.format(len(data)), *data)
         wiringpi2.wiringPiSPIDataRW(self._port, buf)
-
+        
     def reset(self):
         wiringpi2.digitalWrite(self._gpio_reset, 0)
         wiringpi2.delay(1)
@@ -152,6 +152,39 @@ class sh1106(object):
                     byte >>= 1
                 buf.append(byte)
             self._serial_interface.data(buf)
+
+    def display_v2(self, image):
+        """
+        Modified to trade speed for sanity
+        """
+        page = 0xB0
+        pix = image.getdata()
+        step = self.width * 8
+        buf = bytearray(self.width)
+        data_select = self._serial_interface._gpio_command_data_select
+
+        for y in range(0, int(self.pages * step), step):
+            wiringpi2.digitalWrite(data_select, 0)
+            wiringpi2.wiringPiSPIDataRW(self._serial_interface._port,
+                                        bytes(bytearray([page, 0x02, 0x10])))
+
+            page += 1
+            i = 0
+
+            for x in range(self.width):
+                buf[i] = (pix[x + y] & 0x01 |
+                          pix[x + y + self.width] & 0x01 << 1 |
+                          pix[x + y + self.width * 2] & 0x01 << 2 |
+                          pix[x + y + self.width * 3] & 0x01 << 3 |
+                          pix[x + y + self.width * 4] & 0x01 << 4 |
+                          pix[x + y + self.width * 5] & 0x01 << 5 |
+                          pix[x + y + self.width * 6] & 0x01 << 6 |
+                          pix[x + y + self.width * 7] & 0x01 << 7)
+                i += 1
+
+            wiringpi2.digitalWrite(data_select, 1)
+            wiringpi2.wiringPiSPIDataRW(self._serial_interface._port,
+                                        bytes(buf))
 
 
 class ssd1306(object):
