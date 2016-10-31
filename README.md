@@ -41,7 +41,7 @@ systemd script to get the demo to start at boot time on a raspberry pi.
 It is possible to run the demo on a linux PC (i.e. without a SPI display) by using 
 gstreamer as a-sort-of real-time image viewer. Start the demo with a filename as argument
 and then launch the following gstreamer pipeline:
->gst-launch-1.0 multifilesrc loop=true start-index=0 stop-index=0 location=<filename> ! decodebin ! identity sleep-time=10000 ! videoconvert ! autovideosink
+>gst-launch-1.0 multifilesrc loop=true start-index=0 stop-index=0 location=filename ! decodebin ! identity sleep-time=10000 ! videoconvert ! autovideosink
 
 
 ## Disclaimers
