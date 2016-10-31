@@ -27,30 +27,20 @@
 # the timeline.
 # See poster_demo.py for an client example.
 
-from PIL import Image, ImageDraw, ImageFont
+import threading
+import time
+
+from PIL import Image, ImageDraw
 
 try:
     import oled.device
     import oled.render
     serial_interface = oled.device.SPI(
-                            port=0, spi_bus_speed_hz=32000000,
-                            gpio_command_data_select=24, gpio_reset=25)
+                       port=0, spi_bus_speed_hz=32000000,
+                       gpio_command_data_select=24, gpio_reset=25)
     device = oled.device.sh1106(serial_interface)
 except:
     print('ssd1306 interface not available')
-
-import threading
-import time
-
-# Make a set of standard fonts available
-# DriodSans come from the package ttf_droid on Arch
-ttf = 'DroidSans.ttf'
-fontsizes = {'huge': 20, 'large': 14, 'normal': 9, 'small': 7}
-
-# fonts dictionary: {name: (font, height), ... }
-fonts = {k: (ImageFont.truetype(ttf, v),
-             ImageFont.truetype(ttf, v).getsize('bg')[1])
-         for k, v in fontsizes.items()}
 
 
 # The Poster base class. Can be used for responsive and/or static posters.
@@ -81,26 +71,11 @@ class Poster(object):
     def set_redraw_lock(self, lock):
         pass
 
-    def text(self, canvas, pos, text, size='normal',
-             alignment=None, color='white'):
-
-        font, height = fonts[size]
-
-        if alignment == 'middle':
-            pos = (pos[0] - font.getsize(text)[0] / 2, pos[1] - height / 2)
-        elif alignment == 'vcenter':
-            pos = (pos[0], pos[1] - height / 2)
-        elif alignment == 'hcenter':
-            pos = (pos[0] - font.getsize(text)[0] / 2, pos[1])
-
-        canvas.text(pos, text, color, font=font)
-        return (pos[0], pos[1] + int(height*1.2))
-
 
 # A threaded Poster version. Used when the Poster uses long running calls
 # which can then be stuffed away in a thread. This thread will then have to
 # make asynchoneous callbacks for redrawing via new_image_is_ready()
-#
+
 class ThreadedPoster(Poster):
     def __init__(self, size, run_method):
         super(ThreadedPoster, self).__init__(size)
@@ -151,7 +126,6 @@ class Sequenser(threading.Thread):
         self.redraw_lock = threading.Semaphore()
         self.offset_redraw_lock = threading.Lock()
 
-        self.index = -1
         self.offset = 0
         self.active_posters = []
 
@@ -178,16 +152,16 @@ class Sequenser(threading.Thread):
     # Nothing smart going on here yet, just reassemble the image to show.
     # This is a cpu eater.
     #
-    def _redraw(self):
+    def _redraw(self, offset):
         image = Image.new('1', self.size)
 
         of = 0
         for p in self.active_posters:
             ima = p.get_image()
-            image.paste(ima, (-self.offset + of, 0))
+            image.paste(ima, (-offset + of, 0))
             of += p.width
 
-        assert(-self.offset + of >= self.size[0])
+        assert(-offset + of >= self.size[0])
         return image
 
     def _refresh_poster_list(self):
@@ -237,8 +211,8 @@ class Sequenser(threading.Thread):
                 with self.offset_redraw_lock:
                     self.offset += step
                     self.redraw_lock.release()
-             # if catch_up < -self.sleep_per_step:
-             #     print("missing %.3f" % catch_up)
+            # if catch_up < -self.sleep_per_step:
+            #     print("missing %.3f" % catch_up)
 
     def run(self):
         prev_offset = -1
@@ -246,11 +220,11 @@ class Sequenser(threading.Thread):
             self.redraw_lock.acquire()
             with self.offset_redraw_lock:
                 if self.offset != prev_offset:
-                    prev_offset = self.offset
                     self._refresh_poster_list()
-                image = self._redraw()
-                if self.destination_file:
-                    image.save(self.destination_file)
-                else:
-                    device.display_v2(image)
-                time.sleep(0.001)
+                prev_offset = self.offset
+            image = self._redraw(prev_offset)
+            if self.destination_file:
+                image.save(self.destination_file)
+            else:
+                device.display_v2(image)
+            time.sleep(0.001)

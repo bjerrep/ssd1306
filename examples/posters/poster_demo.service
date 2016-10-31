@@ -1,0 +1,9 @@
+
+[Unit]
+Description=Virtual Distributed Ethernet
+
+[Service]
+ExecStart=/usr/bin/sh /root/ssd1306/examples/posters/poster_demo.run
+
+[Install]
+WantedBy=multi-user.target

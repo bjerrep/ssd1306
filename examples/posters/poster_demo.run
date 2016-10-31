@@ -1,0 +1,16 @@
+#!/usr/sh
+
+# installing ssd1306 as a service to let it start at boot
+
+# make a manual git clone to /root/ssd1306 to prepare this service
+# next make
+# ln -s /root/ssd1306/examples/poster_demo.service /etc/systemd/system/poster_demo.service
+
+cd /root/ssd1306
+
+# development phase
+git pull
+/usr/bin/python2 setup.py install
+
+cd examples
+python2 poster_demo.py
