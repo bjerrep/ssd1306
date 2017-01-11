@@ -1,272 +1,410 @@
-#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+# Copyright (c) 2016 Richard Hull and contributors
+# See LICENSE.rst for details.
 
-# The MIT License (MIT)
+# Example usage:
 #
-# Copyright (c) 2015 Richard Hull
+#   from oled.serial import i2c, spi
+#   from oled.device import ssd1306, sh1106
+#   from oled.render import canvas
+#   from PIL import ImageDraw
 #
-# Permission is hereby granted, free of charge, to any person obtaining a copy
-# of this software and associated documentation files (the "Software"), to deal
-# in the Software without restriction, including without limitation the rights
-# to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-# copies of the Software, and to permit persons to whom the Software is
-# furnished to do so, subject to the following conditions:
+#   serial = i2c(port=1, address=0x3C)
+#   device = ssd1306(serial)
 #
-# The above copyright notice and this permission notice shall be included in
-# all copies or substantial portions of the Software.
+#   with canvas(device) as draw:
+#      draw.rectangle(device.bounding_box, outline="white", fill="black")
+#      draw.text(30, 40, "Hello World", fill="white")
 #
-# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-# AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-# OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-# SOFTWARE.
+# As soon as the with-block scope level is complete, the graphics primitives
+# will be flushed to the device.
+#
+# Creating a new canvas is effectively 'carte blanche': If you want to retain
+# an existing canvas, then make a reference like:
+#
+#    c = canvas(device)
+#    for X in ...:
+#        with c as draw:
+#            draw.rectangle(...)
+#
+# As before, as soon as the with block completes, the canvas buffer is flushed
+# to the device
 
-# See examples directory for usage.
+import atexit
 
-# Stdlib.
-import logging
-import struct
-import sys
-
-# 3rd party.
-try:
-    import wiringpi2
-except ImportError:
-    logging.error('Need wiringPi2. Try: sudo pip install wiringpi2')
-    raise
+from oled.serial import i2c
+import oled.mixin as mixin
+import oled.error
+import oled.const
 
 
-logging.basicConfig(level=logging.DEBUG)
-        
-
-class I2C(object):
-    """Wrap a I2C serial interface.
+class device(mixin.capabilities):
     """
-    def __init__(self, port=1, address=0x3C, cmd_mode=0x00, data_mode=0x40):
-        self._address = address
-        self._cmd_mode = cmd_mode
-        self._data_mode = data_mode
-        self._fd = wiringpi2.wiringPiI2CSetup(port)
+    Base class for OLED driver classes
+
+    .. warning::
+        Direct use of the :func:`command` and :func:`data` methods are
+        discouraged: Screen updates should be effected through the
+        :func:`display` method, or preferably with the
+        :class:`oled.render.canvas` context manager.
+    """
+    def __init__(self, const=None, serial_interface=None):
+        self._const = const or oled.const.common
+        self._serial_interface = serial_interface or i2c()
+        atexit.register(self.cleanup)
 
     def command(self, *cmd):
-        """Sends a command or sequence of commands through to the device -
-        maximum allowed is 32 bytes in one go.
         """
-        assert(len(cmd) <= 32)
-        wiringpi2.wiringPiI2CWriteReg8(self._fd, self._address, self._cmd_mode)
-        buf = struct.pack('{}B'.format(len(cmd)), *cmd)
-        wiringpi2.wiringPiI2CWrite(self._fd, buf)
+        Sends a command or sequence of commands through to the delegated
+        serial interface.
+        """
+        self._serial_interface.command(*cmd)
 
     def data(self, data):
-        """Sends a data byte or sequence of data bytes through to the device -
-        maximum allowed in one transaction is 32 bytes, so if data is larger
-        than this it is sent in chunks.
         """
-        wiringpi2.wiringPiI2CWriteReg8(self._fd, self._address, self._data_mode)
-        for i in range(0, len(data), 32):
-            v = data[i:i+32]
-            buf = struct.pack('{}B'.format(len(v)), *v)
-            wiringpi2.wiringPiI2CWrite(self._fd, buf)
+        Sends a data byte or sequence of data bytes through to the delegated
+        serial interface.
+        """
+        self._serial_interface.data(data)
 
-    def reset(self):
-        pass
+    def show(self):
+        """
+        Sets the display mode ON, waking the device out of a prior
+        low-power sleep mode.
+        """
+        self.command(self._const.DISPLAYON)
 
-class SPI(object):
-    """Wrap an SPI serial interface.
+    def hide(self):
+        """
+        Switches the display mode OFF, putting the device in low-power
+        sleep mode.
+        """
+        self.command(self._const.DISPLAYOFF)
+
+    def contrast(self, level):
+        """
+        Switches the display contrast to the desired level, in the range
+        0-255. Note that setting the level to a low (or zero) value will
+        not necessarily dim the display to nearly off. In other words,
+        this method is **NOT** suitable for fade-in/out animation.
+
+        :param level: Desired contrast level in the range of 0-255.
+        :type level: int
+        """
+        assert(level >= 0)
+        assert(level <= 255)
+        self.command(self._const.SETCONTRAST, level)
+
+    def cleanup(self):
+        self.hide()
+        self.clear()
+        self._serial_interface.cleanup()
+
+
+class sh1106(device):
     """
-    def __init__(self, port=0, spi_bus_speed_hz=32000000, gpio_command_data_select=24, gpio_reset=25):
-        self._port = port
-        self._gpio_command_data_select = gpio_command_data_select
-        self._gpio_reset = gpio_reset
-        wiringpi2.wiringPiSetupGpio()
-        wiringpi2.wiringPiSPISetup(port, spi_bus_speed_hz)
-        wiringpi2.pinMode(gpio_command_data_select, 1)
-        wiringpi2.pinMode(gpio_reset, 1)
-        
-    def command(self, *cmd):
-        assert(len(cmd) <= 32)
-        wiringpi2.digitalWrite(self._gpio_command_data_select, 0) 
-        buf = struct.pack('{}B'.format(len(cmd)), *cmd)
-        wiringpi2.wiringPiSPIDataRW(self._port, buf)
+    Encapsulates the serial interface to the monochrome SH1106 OLED display
+    hardware. On creation, an initialization sequence is pumped to the display
+    to properly configure it. Further control commands can then be called to
+    affect the brightness and other settings.
+    """
+    def __init__(self, serial_interface=None, width=128, height=64, rotate=0):
+        super(sh1106, self).__init__(oled.const.sh1106, serial_interface)
+        self.capabilities(width, height, rotate)
+        self._pages = self._h // 8
 
-    def data(self, data):
-        wiringpi2.digitalWrite(self._gpio_command_data_select, 1)
-        buf = struct.pack('{}B'.format(len(data)), *data)
-        wiringpi2.wiringPiSPIDataRW(self._port, buf)
-        
-    def reset(self):
-        wiringpi2.digitalWrite(self._gpio_reset, 0)
-        wiringpi2.delay(1)
-        wiringpi2.digitalWrite(self._gpio_reset, 1)
-        wiringpi2.delay(1)
-            
+        # FIXME: Delay doing anything here with alternate screen sizes
+        # until we are able to get a device to test with.
+        if width != 128 or height != 64:
+            raise oled.error.DeviceDisplayModeError(
+                "Unsupported display mode: {0} x {1}".format(width, height))
 
-class sh1106(object):
-    def __init__(self, serial_interface):
-        self._serial_interface = serial_interface
-        self.width = 128
-        self.height = 64
-        self.pages = self.height / 8
-        
-        self._serial_interface.reset()
+        self.command(
+            self._const.DISPLAYOFF,
+            self._const.MEMORYMODE,
+            self._const.SETHIGHCOLUMN,      0xB0, 0xC8,
+            self._const.SETLOWCOLUMN,       0x10, 0x40,
+            self._const.SETSEGMENTREMAP,
+            self._const.NORMALDISPLAY,
+            self._const.SETMULTIPLEX,       0x3F,
+            self._const.DISPLAYALLON_RESUME,
+            self._const.SETDISPLAYOFFSET,   0x00,
+            self._const.SETDISPLAYCLOCKDIV, 0xF0,
+            self._const.SETPRECHARGE,       0x22,
+            self._const.SETCOMPINS,         0x12,
+            self._const.SETVCOMDETECT,      0x20,
+            self._const.CHARGEPUMP,         0x14)
 
-        self._serial_interface.command(
-            _Command.DISPLAYOFF,
-            _Command.MEMORYMODE,
-            _Command.SETHIGHCOLUMN,      0xB0, 0xC8,
-            _Command.SETLOWCOLUMN,       0x10, 0x40,
-            _Command.SETCONTRAST,        0x7F,
-            _Command.SETSEGMENTREMAP,
-            _Command.NORMALDISPLAY,
-            _Command.SETMULTIPLEX,       0x3F,
-            _Command.DISPLAYALLON_RESUME,
-            _Command.SETDISPLAYOFFSET,   0x00,
-            _Command.SETDISPLAYCLOCKDIV, 0xF0,
-            _Command.SETPRECHARGE,       0x22,
-            _Command.SETCOMPINS,         0x12,
-            _Command.SETVCOMDETECT,      0x20,
-            _Command.CHARGEPUMP,         0x14,
-            _Command.DISPLAYON)
+        self.contrast(0x7F)
+        self.clear()
+        self.show()
 
     def display(self, image):
         """
-        Takes a 1-bit image and dumps it to the SH1106 OLED display.
+        Takes a 1-bit :py:mod:`PIL.Image` and dumps it to the SH1106
+        OLED display.
         """
-        assert(image.mode == '1')
-        assert(image.size[0] == self.width)
-        assert(image.size[1] == self.height)
+        assert(image.mode == self.mode)
+        assert(image.size == self.size)
 
-        page = 0xB0
-        pix = list(image.getdata())
-        step = self.width * 8
-        for y in range(0, int(self.pages * step), step):
-            # move to given page, then reset the column address
-            self._serial_interface.command(page, 0x02, 0x10)
-            page += 1
-            buf = []
-            for x in range(self.width):
-                byte = 0
-                for n in range(0, step, self.width):
-                    byte |= (pix[x + y + n] & 0x01) << 8
-                    byte >>= 1
-                buf.append(byte)
-            self._serial_interface.data(buf)
+        image = self.preprocess(image)
 
-    def display_v2(self, image):
-        """
-        Modified to trade speed for sanity
-        """
-        page = 0xB0
-        pix = image.getdata()
-        step = self.width * 8
+        set_page_address = 0xB0
+        image_data = image.getdata()
+        pixels_per_page = self.width * 8
         buf = bytearray(self.width)
-        data_select = self._serial_interface._gpio_command_data_select
 
-        for y in range(0, int(self.pages * step), step):
-            wiringpi2.digitalWrite(data_select, 0)
-            wiringpi2.wiringPiSPIDataRW(self._serial_interface._port,
-                                        bytes(bytearray([page, 0x02, 0x10])))
-
-            page += 1
-            i = 0
+        for y in range(0, int(self._pages * pixels_per_page), pixels_per_page):
+            self.command(set_page_address, 0x02, 0x10)
+            set_page_address += 1
+            offsets = [y + self.width * i for i in range(8)]
 
             for x in range(self.width):
-                buf[i] = (pix[x + y] & 0x01 |
-                          pix[x + y + self.width] & 0x01 << 1 |
-                          pix[x + y + self.width * 2] & 0x01 << 2 |
-                          pix[x + y + self.width * 3] & 0x01 << 3 |
-                          pix[x + y + self.width * 4] & 0x01 << 4 |
-                          pix[x + y + self.width * 5] & 0x01 << 5 |
-                          pix[x + y + self.width * 6] & 0x01 << 6 |
-                          pix[x + y + self.width * 7] & 0x01 << 7)
-                i += 1
+                buf[x] = \
+                    (image_data[x + offsets[0]] and 0x01) | \
+                    (image_data[x + offsets[1]] and 0x02) | \
+                    (image_data[x + offsets[2]] and 0x04) | \
+                    (image_data[x + offsets[3]] and 0x08) | \
+                    (image_data[x + offsets[4]] and 0x10) | \
+                    (image_data[x + offsets[5]] and 0x20) | \
+                    (image_data[x + offsets[6]] and 0x40) | \
+                    (image_data[x + offsets[7]] and 0x80)
 
-            wiringpi2.digitalWrite(data_select, 1)
-            wiringpi2.wiringPiSPIDataRW(self._serial_interface._port,
-                                        bytes(buf))
+            self.data(list(buf))
 
 
-class ssd1306(object):
-    def __init__(self, serial_interface):
-        self._serial_interface = serial_interface
-        self.width = 128
-        self.height = 64
-        self.pages = self.height / 8
+class ssd1306(device):
+    """
+    Encapsulates the serial interface to the monochrome SSD1306 OLED display
+    hardware. On creation, an initialization sequence is pumped to the display
+    to properly configure it. Further control commands can then be called to
+    affect the brightness and other settings.
+    """
+    def __init__(self, serial_interface=None, width=128, height=64, rotate=0):
+        super(ssd1306, self).__init__(oled.const.ssd1306, serial_interface)
+        self.capabilities(width, height, rotate)
+        self._pages = self._h // 8
+        self._buffer = [0] * self._w * self._pages
+        self._offsets = [n * self._w for n in range(8)]
 
-        self._serial_interface.reset()
-        
-        self._serial_interface.command(
-            _Command.DISPLAYOFF,
-            _Command.SETDISPLAYCLOCKDIV, 0x80,
-            _Command.SETMULTIPLEX,       0x3F,
-            _Command.SETDISPLAYOFFSET,   0x00,
-            _Command.SETSTARTLINE,
-            _Command.CHARGEPUMP,         0x14,
-            _Command.MEMORYMODE,         0x00,
-            _Command.SEGREMAP,
-            _Command.COMSCANDEC,
-            _Command.SETCOMPINS,         0x12,
-            _Command.SETCONTRAST,        0xCF,
-            _Command.SETPRECHARGE,       0xF1,
-            _Command.SETVCOMDETECT,      0x40,
-            _Command.DISPLAYALLON_RESUME,
-            _Command.NORMALDISPLAY,
-            _Command.DISPLAYON)
+        # Supported modes
+        settings = {
+            (128, 64): dict(multiplex=0x3F, displayclockdiv=0x80, compins=0x12),
+            (128, 32): dict(multiplex=0x1F, displayclockdiv=0x80, compins=0x02),
+            (96, 16): dict(multiplex=0x0F, displayclockdiv=0x60, compins=0x02)
+        }.get((width, height))
+
+        if settings is None:
+            raise oled.error.DeviceDisplayModeError(
+                "Unsupported display mode: {0} x {1}".format(width, height))
+
+        self.command(
+            self._const.DISPLAYOFF,
+            self._const.SETDISPLAYCLOCKDIV, settings['displayclockdiv'],
+            self._const.SETMULTIPLEX,       settings['multiplex'],
+            self._const.SETDISPLAYOFFSET,   0x00,
+            self._const.SETSTARTLINE,
+            self._const.CHARGEPUMP,         0x14,
+            self._const.MEMORYMODE,         0x00,
+            self._const.SETREMAP,
+            self._const.COMSCANDEC,
+            self._const.SETCOMPINS,         settings['compins'],
+            self._const.SETPRECHARGE,       0xF1,
+            self._const.SETVCOMDETECT,      0x40,
+            self._const.DISPLAYALLON_RESUME,
+            self._const.NORMALDISPLAY)
+
+        self.contrast(0xCF)
+        self.clear()
+        self.show()
 
     def display(self, image):
         """
-        Takes a 1-bit image and dumps it to the SSD1306 OLED display.
+        Takes a 1-bit :py:mod:`PIL.Image` and dumps it to the SSD1306
+        OLED display.
         """
-        assert(image.mode == '1')
-        assert(image.size[0] == self.width)
-        assert(image.size[1] == self.height)
+        assert(image.mode == self.mode)
+        assert(image.size == self.size)
 
-        self._serial_interface.command(
-            _Command.COLUMNADDR, 0x00, self.width-1,  # Column start/end address
-            _Command.PAGEADDR,   0x00, self.pages-1)  # Page start/end address
+        image = self.preprocess(image)
 
+        self.command(
+            # Column start/end address
+            self._const.COLUMNADDR, 0x00, self._w - 1,
+            # Page start/end address
+            self._const.PAGEADDR, 0x00, self._pages - 1)
+
+        w = self._w
         pix = list(image.getdata())
-        step = self.width * 8
-        buf = []
-        for y in range(0, self.pages * step, step):
-            i = y + self.width-1
+        step = w * 8
+        buf = self._buffer
+        os0, os1, os2, os3, os4, os5, os6, os7 = self._offsets
+        j = 0
+        for y in range(0, self._pages * step, step):
+            i = y + w - 1
             while i >= y:
-                byte = 0
-                for n in range(0, step, self.width):
-                    byte |= (pix[i + n] & 0x01) << 8
-                    byte >>= 1
+                buf[j] = \
+                    (0x01 if pix[i] > 0 else 0) | \
+                    (0x02 if pix[i + os1] > 0 else 0) | \
+                    (0x04 if pix[i + os2] > 0 else 0) | \
+                    (0x08 if pix[i + os3] > 0 else 0) | \
+                    (0x10 if pix[i + os4] > 0 else 0) | \
+                    (0x20 if pix[i + os5] > 0 else 0) | \
+                    (0x40 if pix[i + os6] > 0 else 0) | \
+                    (0x80 if pix[i + os7] > 0 else 0)
 
-                buf.append(byte)
                 i -= 1
+                j += 1
 
-        self._serial_interface.data(buf)
+        self.data(buf)
 
 
-class _Command:
-    CHARGEPUMP = 0x8D
-    COLUMNADDR = 0x21
-    COMSCANDEC = 0xC8
-    COMSCANINC = 0xC0
-    DISPLAYALLON = 0xA5
-    DISPLAYALLON_RESUME = 0xA4
-    DISPLAYOFF = 0xAE
-    DISPLAYON = 0xAF
-    EXTERNALVCC = 0x1
-    INVERTDISPLAY = 0xA7
-    MEMORYMODE = 0x20
-    NORMALDISPLAY = 0xA6
-    PAGEADDR = 0x22
-    SEGREMAP = 0xA0
-    SETCOMPINS = 0xDA
-    SETCONTRAST = 0x81
-    SETDISPLAYCLOCKDIV = 0xD5
-    SETDISPLAYOFFSET = 0xD3
-    SETHIGHCOLUMN = 0x10
-    SETLOWCOLUMN = 0x00
-    SETMULTIPLEX = 0xA8
-    SETPRECHARGE = 0xD9
-    SETSEGMENTREMAP = 0xA1
-    SETSTARTLINE = 0x40
-    SETVCOMDETECT = 0xDB
-    SWITCHCAPVCC = 0x2
+class ssd1331(device):
+    """
+    Encapsulates the serial interface to the 16-bit color (5-6-5 RGB) SSD1331
+    OLED display hardware. On creation, an initialization sequence is pumped to
+    the display to properly configure it. Further control commands can then be
+    called to affect the brightness and other settings.
+    """
+    def __init__(self, serial_interface=None, width=96, height=64, rotate=0):
+        super(ssd1331, self).__init__(oled.const.ssd1331, serial_interface)
+        self.capabilities(width, height, rotate, mode="RGB")
+        self._buffer = [0] * self._w * self._h * 2
+
+        if width != 96 or height != 64:
+            raise oled.error.DeviceDisplayModeError(
+                "Unsupported display mode: {0} x {1}".format(width, height))
+
+        self.command(
+            self._const.DISPLAYOFF,
+            self._const.SETREMAP,             0x72,
+            self._const.SETDISPLAYSTARTLINE,  0x00,
+            self._const.SETDISPLAYOFFSET,     0x00,
+            self._const.NORMALDISPLAY,
+            self._const.SETMULTIPLEX,         0x3F,
+            self._const.SETMASTERCONFIGURE,   0x8E,
+            self._const.POWERSAVEMODE,        0x0B,
+            self._const.PHASE12PERIOD,        0x74,
+            self._const.CLOCKDIVIDER,         0xD0,
+            self._const.SETPRECHARGESPEEDA,   0x80,
+            self._const.SETPRECHARGESPEEDB,   0x80,
+            self._const.SETPRECHARGESPEEDC,   0x80,
+            self._const.SETPRECHARGEVOLTAGE,  0x3E,
+            self._const.SETVVOLTAGE,          0x3E,
+            self._const.MASTERCURRENTCONTROL, 0x0F)
+
+        self.contrast(0xFF)
+        self.clear()
+        self.show()
+
+    def display(self, image):
+        """
+        Takes a 24-bit RGB :py:mod:`PIL.Image` and dumps it to the SSD1331 OLED
+        display.
+        """
+        assert(image.mode == self.mode)
+        assert(image.size == self.size)
+
+        image = self.preprocess(image)
+
+        self.command(
+            self._const.SETCOLUMNADDR, 0x00, self._w - 1,
+            self._const.SETROWADDR, 0x00, self._h - 1)
+
+        i = 0
+        buf = self._buffer
+        for r, g, b in image.getdata():
+            # 65K format 1
+            buf[i] = r & 0xF8 | g >> 5
+            buf[i + 1] = g << 5 & 0xE0 | b >> 3
+            i += 2
+
+        self.data(buf)
+
+    def contrast(self, level):
+        """
+        Switches the display contrast to the desired level, in the range
+        0-255. Note that setting the level to a low (or zero) value will
+        not necessarily dim the display to nearly off. In other words,
+        this method is **NOT** suitable for fade-in/out animation.
+
+        :param level: Desired contrast level in the range of 0-255.
+        :type level: int
+        """
+        assert(level >= 0)
+        assert(level <= 255)
+        self.command(self._const.SETCONTRASTA, level,
+                     self._const.SETCONTRASTB, level,
+                     self._const.SETCONTRASTC, level)
+
+
+class ssd1325(device):
+    """
+    Encapsulates the serial interface to the 4-bit greyscale SSD1325 OLED
+    display hardware. On creation, an initialization sequence is pumped to the
+    display to properly configure it. Further control commands can then be
+    called to affect the brightness and other settings.
+    """
+    def __init__(self, serial_interface=None, width=128, height=64, rotate=0):
+        super(ssd1325, self).__init__(oled.const.ssd1325, serial_interface)
+        self.capabilities(width, height, rotate, mode="RGB")
+        self._buffer = [0] * (self._w * self._h // 2)
+
+        if width != 128 or height != 64:
+            raise oled.error.DeviceDisplayModeError(
+                "Unsupported display mode: {0} x {1}".format(width, height))
+
+        self.command(
+            self._const.DISPLAYOFF,
+            self._const.SETCLOCK,               0xF1,
+            self._const.SETMULTIPLEX,           0x3F,
+            self._const.SETOFFSET,              0x4C,
+            self._const.SETSTARTLINE,           0x00,
+            self._const.MASTERCONFIG,           0x02,
+            self._const.SETREMAP,               0x50,
+            self._const.SETCURRENT + 2,
+            self._const.SETGRAYTABLE,           0x01, 0x11, 0x22, 0x32, 0x43, 0x54, 0x65, 0x76)
+
+        self.contrast(0xFF)
+
+        self.command(
+            self._const.SETROWPERIOD,           0x51,
+            self._const.SETPHASELEN,            0x55,
+            self._const.SETPRECHARGECOMP,       0x02,
+            self._const.SETPRECHARGECOMPENABLE, 0x28,
+            self._const.SETVCOMLEVEL,           0x1C,
+            self._const.SETVSL,                 0x0F,
+            self._const.NORMALDISPLAY)
+
+        self.clear()
+        self.show()
+
+    def display(self, image):
+        """
+        Takes a 24-bit RGB :py:mod:`PIL.Image` and dumps it to the SSD1325 OLED
+        display, converting the image pixels to 4-bit greyscale using a
+        simplified Luma calculation, based on *Y'=0.299R'+0.587G'+0.114B'*.
+        """
+        assert(image.mode == self.mode)
+        assert(image.size == self.size)
+
+        image = self.preprocess(image)
+
+        self.command(
+            self._const.SETCOLUMNADDR, 0x00, self._w - 1,
+            self._const.SETROWADDR, 0x00, self._h - 1)
+
+        i = 0
+        buf = self._buffer
+        for r, g, b in image.getdata():
+            # RGB->Greyscale luma calculation into 4-bits
+            grey = (r * 306 + g * 601 + b * 117) >> 14
+
+            if i % 2 == 0:
+                buf[i // 2] = grey
+            else:
+                buf[i // 2] |= (grey << 4)
+
+            i += 1
+
+        self.data(buf)

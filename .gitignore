@@ -13,6 +13,8 @@ develop-eggs/
 dist/
 downloads/
 eggs/
+eggs/
+.eggs/
 lib/
 lib64/
 parts/
@@ -25,6 +27,7 @@ var/
 # PyInstaller
 #  Usually these files are written by a python script from a template
 #  before PyInstaller builds the exe, so as to inject date/other infos into it.
+MANIFEST
 *.manifest
 *.spec
 
@@ -48,9 +51,12 @@ coverage.xml
 *.log
 
 # Sphinx documentation
-docs/_build/
+doc/_build/
 
 # PyBuilder
 target/
 .ropeproject
 *~
+
+# OSX
+.DS_Store

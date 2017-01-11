@@ -1,26 +1,31 @@
 #!/usr/bin/env python
+# -*- coding: utf-8 -*-
+# PYTHON_ARGCOMPLETE_OK
 
-# Stdlib.
-import os
-import sys
-
-# Allow running example without installing library.
-sys.path.append('..')
-
-# 3rd party.
+import os.path
+from demo_opts import device
 from PIL import Image
 
-import oled.device
-import oled.render
 
-# Select serial interface to match your OLED device.
-# The defaults for the arguments are shown. No arguments are required.
-#serial_interface = oled.device.I2C(port=1, address=0x3C, cmd_mode=0x00, data_mode=0x40)
-serial_interface = oled.device.SPI(port=0, spi_bus_speed_hz=32000000, gpio_command_data_select=24, gpio_reset=25)
-# Select controller chip to match your OLED device.
-device = oled.device.sh1106(serial_interface)
-#device = oled.device.ssd1306(serial_interface)
+def main():
+    img_path = os.path.abspath(os.path.join(os.path.dirname(__file__),
+                                            'images', 'pi_logo.png'))
+    logo = Image.open(img_path).convert("RGBA")
+    fff = Image.new(logo.mode, logo.size, (255,) * 4)
 
-with oled.render.canvas(device) as draw:
-    logo = Image.open(os.path.join(os.path.dirname(__name__), 'images/pi_logo.png'))
-    draw.bitmap((32, 0), logo, fill=1)
+    background = Image.new("RGBA", device.size, "white")
+    posn = ((device.width - logo.width) // 2, 0)
+
+    while True:
+        for angle in range(0, 360, 2):
+            rot = logo.rotate(angle, resample=Image.BILINEAR)
+            img = Image.composite(rot, fff, rot)
+            background.paste(img, posn)
+            device.display(background.convert(device.mode))
+
+
+if __name__ == "__main__":
+    try:
+        main()
+    except KeyboardInterrupt:
+        pass

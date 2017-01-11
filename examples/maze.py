@@ -1,40 +1,26 @@
 #!/usr/bin/env python
+# -*- coding: utf-8 -*-
+# PYTHON_ARGCOMPLETE_OK
 #
 # Maze generator example for RPi-SSD1306
 #
 # Adapted from:
 #    https://github.com/rm-hull/maze/blob/master/src/maze/generator.clj
 
-# Stdlib.
-import sys
 import time
+from demo_opts import device
+from oled.render import canvas
 from random import randrange
-
-# Allow running example without installing library.
-sys.path.append('..')
-
-# 3rd party.
-from PIL import ImageFont
-
-import oled.device
-import oled.render
-
-# Select serial interface to match your OLED device.
-# The defaults for the arguments are shown. No arguments are required.
-#serial_interface = oled.device.I2C(port=1, address=0x3C, cmd_mode=0x00, data_mode=0x40)
-serial_interface = oled.device.SPI(port=0, spi_bus_speed_hz=32000000, gpio_command_data_select=24, gpio_reset=25)
-# Select controller chip to match your OLED device.
-device = oled.device.sh1106(serial_interface)
-#device = oled.device.ssd1306(serial_interface)
 
 NORTH = 1
 WEST = 2
 
+
 class Maze(object):
 
     def __init__(self, size):
-        self.width = size[0]
-        self.height = size[1]
+        self.width = int(size[0])
+        self.height = int(size[1])
         self.size = self.width * self.height
         self.generate()
 
@@ -44,7 +30,7 @@ class Maze(object):
 
     def coords(self, offset):
         """ Converts offset to [x,y] co-ords """
-        return (offset % self.width, offset / self.width)
+        return (offset % self.width, offset // self.width)
 
     def neighbours(self, pos):
         neighbours = []
@@ -77,7 +63,7 @@ class Maze(object):
         if p2 - p1 == 1:
             return self.data[p2] & WEST != 0
 
-        return false;
+        return False
 
     def knockdown_wall(self, p1, p2):
         """ Knocks down the wall between the two given points in the maze.
@@ -92,14 +78,14 @@ class Maze(object):
             self.data[p2] &= NORTH
 
     def generate(self):
-        self.data = [ NORTH | WEST ] * self.size
-        visited = { 0: True }
+        self.data = [NORTH | WEST] * self.size
+        visited = {0: True}
         stack = [0]
         not_visited = lambda x: not visited.get(x, False)
 
         while len(stack) > 0:
             curr = stack[-1]
-            n = filter(not_visited, self.neighbours(curr))
+            n = list(filter(not_visited, self.neighbours(curr)))
             sz = len(n)
             if sz == 0:
                 stack.pop()
@@ -113,25 +99,25 @@ class Maze(object):
 
     def render(self, draw, scale=lambda a: a):
 
-        for i in xrange(self.size):
+        for i in range(self.size):
             line = []
             p1 = self.coords(i)
 
             if self.data[i] & NORTH > 0:
-                p2 = (p1[0]+1, p1[1])
+                p2 = (p1[0] + 1, p1[1])
                 line += p2 + p1
 
             if self.data[i] & WEST > 0:
-                p3 = (p1[0], p1[1]+1)
+                p3 = (p1[0], p1[1] + 1)
                 line += p1 + p3
 
-            draw.line(map(scale, line), fill=1)
+            draw.line(list(map(scale, line)), fill="white")
 
-        draw.rectangle(map(scale, [0, 0, self.width, self.height]), outline=1)
+        draw.rectangle(list(map(scale, [0, 0, self.width, self.height])), outline="white")
 
     def to_string(self):
         s = ""
-        for y in xrange(self.height):
+        for y in range(self.height):
             for x in range(self.width):
                 s += "+"
                 if self.data[self.offset(x, y)] & NORTH != 0:
@@ -151,13 +137,18 @@ class Maze(object):
 
         return s
 
+
 def demo(iterations):
     for loop in range(iterations):
-        for scale in [2,3,4,3]:
-            sz = map(lambda z: z/scale-1, (device.width, device.height))
-            with oled.render.canvas(device) as draw:
+        for scale in [2, 3, 4, 3]:
+            sz = list(map(lambda z: z // scale - 1, device.size))
+            with canvas(device) as draw:
                 Maze(sz).render(draw, lambda z: int(z * scale))
                 time.sleep(1)
 
+
 if __name__ == "__main__":
-    demo(20)
+    try:
+        demo(20)
+    except KeyboardInterrupt:
+        pass

@@ -1,62 +1,93 @@
 #!/usr/bin/env python
+# -*- coding: utf-8 -*-
+# PYTHON_ARGCOMPLETE_OK
 
 # Ported from:
 # https://github.com/adafruit/Adafruit_Python_SSD1306/blob/master/examples/shapes.py
 
-# Stdlib.
-import sys
+import time
+import datetime
+from demo_opts import device
+from oled.render import canvas
 
-# Allow running example without installing library.
-sys.path.append('..')
 
-# 3rd party.
-from PIL import ImageFont
-
-import oled.device
-import oled.render
-
-# Select serial interface to match your OLED device.
-# The defaults for the arguments are shown. No arguments are required.
-#serial_interface = oled.device.I2C(port=1, address=0x3C, cmd_mode=0x00, data_mode=0x40)
-serial_interface = oled.device.SPI(port=0, spi_bus_speed_hz=32000000, gpio_command_data_select=24, gpio_reset=25)
-# Select controller chip to match your OLED device.
-device = oled.device.sh1106(serial_interface)
-#device = oled.device.ssd1306(serial_interface)
-
-font = ImageFont.load_default()
-
-with oled.render.canvas(device) as draw:
+def primitives(draw):
     # Draw some shapes.
     # First define some constants to allow easy resizing of shapes.
     padding = 2
     shape_width = 20
     top = padding
     bottom = device.height - padding - 1
-    # Draw a rectangle of the same size of screen
-    draw.rectangle((0, 0, device.width-1, device.height-1), outline=255, fill=0)
     # Move left to right keeping track of the current x position for drawing shapes.
     x = padding
     # Draw an ellipse.
-    draw.ellipse((x, top, x+shape_width, bottom), outline=255, fill=0)
+    draw.ellipse((x, top, x + shape_width, bottom), outline="red", fill="black")
     x += shape_width + padding
     # Draw a rectangle.
-    draw.rectangle((x, top, x+shape_width, bottom), outline=255, fill=0)
+    draw.rectangle((x, top, x + shape_width, bottom), outline="blue", fill="black")
     x += shape_width + padding
     # Draw a triangle.
-    draw.polygon([(x, bottom), (x+shape_width/2, top), (x+shape_width, bottom)], outline=255, fill=0)
-    x += shape_width+padding
+    draw.polygon([(x, bottom), (x + shape_width / 2, top), (x + shape_width, bottom)], outline="green", fill="black")
+    x += shape_width + padding
     # Draw an X.
-    draw.line((x, bottom, x+shape_width, top), fill=255)
-    draw.line((x, top, x+shape_width, bottom), fill=255)
-    x += shape_width+padding
-
-    # Load default font.
-    font = ImageFont.load_default()
-
-    # Alternatively load a TTF font.
-    # Some other nice fonts to try: http://www.dafont.com/bitmap.php
-    # font = ImageFont.truetype('Minecraftia.ttf', 8)
-
+    draw.line((x, bottom, x + shape_width, top), fill="yellow")
+    draw.line((x, top, x + shape_width, bottom), fill="yellow")
+    x += shape_width + padding
     # Write two lines of text.
-    draw.text((x, top),    'Hello',  font=font, fill=255)
-    draw.text((x, top+20), 'World!', font=font, fill=255)
+    size = draw.textsize('World!')
+    x = device.width - padding - size[0]
+    draw.rectangle((x, top + 4, x + size[0], top + size[1]), fill="black")
+    draw.rectangle((x, top + 16, x + size[0], top + 16 + size[1]), fill="black")
+    draw.text((device.width - padding - size[0], top + 4), 'Hello', fill="cyan")
+    draw.text((device.width - padding - size[0], top + 16), 'World!', fill="purple")
+    # Draw a rectangle of the same size of screen
+    draw.rectangle(device.bounding_box, outline="white")
+
+
+def main():
+    print("Testing basic canvas graphics...")
+    for _ in range(2):
+        with canvas(device) as draw:
+            primitives(draw)
+    time.sleep(5)
+
+    print("Testing contrast (dim/bright cycles)...")
+    for _ in range(5):
+        for level in range(255, -1, -10):
+            device.contrast(level)
+            time.sleep(0.1)
+        time.sleep(0.5)
+
+        for level in range(0, 255, 10):
+            device.contrast(level)
+            time.sleep(0.1)
+
+        time.sleep(1)
+
+    print("Testing display ON/OFF...")
+    for _ in range(5):
+        time.sleep(0.5)
+        device.hide()
+
+        time.sleep(0.5)
+        device.show()
+
+    print("Testing clear display...")
+    time.sleep(2)
+    device.clear()
+
+    print("Testing screen updates...")
+    time.sleep(2)
+    for x in range(40):
+        with canvas(device) as draw:
+            now = datetime.datetime.now()
+            draw.text((x, 4), str(now.date()), fill="white")
+            draw.text((10, 16), str(now.time()), fill="white")
+            time.sleep(0.1)
+
+
+if __name__ == "__main__":
+    try:
+        main()
+    except KeyboardInterrupt:
+        pass
