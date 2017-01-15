@@ -1,76 +1,52 @@
-SSD1306 / SSD1325 / SSD1331 / SH1106 OLED Driver
-================================================
-.. image:: https://travis-ci.org/rm-hull/ssd1306.svg?branch=master
-   :target: https://travis-ci.org/rm-hull/ssd1306
 
-.. image:: https://coveralls.io/repos/github/rm-hull/ssd1306/badge.svg?branch=master
-   :target: https://coveralls.io/github/rm-hull/ssd1306?branch=master
+ssd1306 playground
+==================
 
-.. image:: https://img.shields.io/maintenance/yes/2017.svg?maxAge=2592000
+This is a fork of the rm-hull/luma.oled project intended for general fooling around. The upstream have all the latest stuff, extensive documentation etc so if you're looking for a place to start then have a look there.
 
-.. image:: https://img.shields.io/pypi/pyversions/ssd1306.svg
-   :target: https://pypi.python.org/pypi/ssd1306
+poster_demo
+-----------
+There now is a similar demo in upstream so this one here might be a little dated. The intention is to have a machine info display running on a rpi. There is also a rudimentary systemd script so once a rpi is hooked up to a display it should be quite simple to have the poster_demo running at boot. For a headless rpi this is a must have :-)
 
-.. image:: https://img.shields.io/pypi/v/ssd1306.svg
-   :target: https://pypi.python.org/pypi/ssd1306
+.. image:: https://cloud.githubusercontent.com/assets/12825543/19840216/9f69809e-9ef1-11e6-9346-5226ca950a00.gif
+   :alt: posterdemo
 
-Python library interfacing OLED matrix displays with the SSD1306, SSD1325, SSD1331 or 
-SH1106 driver using I2C/SPI on the Raspberry Pi and other linux-based single-board computers - 
-it provides a Pillow-compatible drawing canvas, and other functionality to support:
+**oled/sequencer.py**: Contains the sequencer and also two base classes to be used by posters (the views). 
+The sequencer fetches new posters to display from the client script so both 
+the actual posters available and the order they should appear in is under
+the control of the client script.
 
-* scrolling/panning capability,
-* terminal-style printing,
-* state management,
-* color/greyscale (where supported),
-* dithering to monochrome
+**examples/poster_demo.py**: Loads some machine info posters from examples/posters and starts the sequencer.
+The individual demo posters are designed to occupy only half the display width. 
+This is just an odd design decision for the demo, they can be of any width.
 
-A list of tested devices can be found in the
-`wiki <https://github.com/rm-hull/ssd1306/wiki/Usage-&-Benchmarking>`_.
+It is possible to run the demo on a linux PC (i.e. without a SPI display) by using 
+gstreamer as a-sort-of real-time image viewer. Start the demo with a filename as argument
+and then launch the following gstreamer pipeline:
 
-The SSD1306 display pictured below is 128 x 64 pixels, and the board is `tiny`,
-and will fit neatly inside the RPi case.
+.. code-block::
 
-.. image:: https://raw.githubusercontent.com/rm-hull/ssd1306/master/doc/images/mounted_display.jpg
-   :alt: mounted
+  gst-launch-1.0 multifilesrc loop=true start-index=0 stop-index=0 location=filename ! decodebin ! identity sleep-time=10000 ! videoconvert ! autovideosink
 
-As well as display drivers for various physical OLED devices, there are emulators that run in real-time 
-(with pygame) and others that can take screenshots, or assemble animated GIFs, as per the examples below (source
-code for these is available in the `examples <https://github.com/rm-hull/ssd1306/tree/master/examples>`_ directory:
+Upstream have built-in emulators and an animated gif recorder. But this is still a handy gstreamer hack to have in the toolbox.
 
-.. image:: https://raw.githubusercontent.com/rm-hull/ssd1306/master/doc/images/clock_anim.gif?raw=true
-   :alt: clock
 
-.. image:: https://raw.githubusercontent.com/rm-hull/ssd1306/master/doc/images/invaders_anim.gif?raw=true
-   :alt: invaders
+television
+----------
 
-.. image:: https://raw.githubusercontent.com/rm-hull/ssd1306/master/doc/images/crawl_anim.gif?raw=true
-   :alt: crawl
+Everybody wants a oled tv so here it is. Its impressive that anything can even be recognized with a 128*64 resolution in one color when playing a video, but it sort of can:
 
-Documentation
--------------
-Full documentation with installation instructions and examples can be found on
-https://ssd1306.readthedocs.io.
+.. image:: https://cloud.githubusercontent.com/assets/12825543/21967215/f579453c-db82-11e6-8977-390276c23fe3.gif
+   :alt: television_demo
 
-License
--------
-The MIT License (MIT)
+The television demo uses gstreamer for the heavy lifting so thats brings in a fair amount of new packages to install. Don't do this if diskspace is low and be aware that a little tinkering might be needed as well. The television demo can play videos, online http live feeds and show the test patterns from the gstreamer videotestsrc. The movie above is from divx.com and recorded with the 'gifanim' display driver. A quad core rpi is rather loaded when decoding and rescaling e.g. mp4 streams so less powerfull rpis might require somewhat lighter encodings. A display with a depth of more than one bit, a slightly higher resolution and perhaps even some colors then it will be time to add some sound...
 
-Copyright (c) 2016 Richard Hull & Contributors
 
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
+Disclaimers
+-----------
 
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
+Only a SPI sh1106 display have been tested.
 
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
+There is always something that breaks in strange ways but the demo here should 
+run more or less out of the box with python 2.7 on a raspberry pi 3. The distro
+tested is Arch so there might be some adjustments needed for e.g. raspbian or other distroes.

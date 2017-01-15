@@ -45,7 +45,7 @@ logging.basicConfig(
 # ignore PIL debug messages
 logging.getLogger('PIL').setLevel(logging.ERROR)
 
-args = parser.parse_args()
+args, unknown = parser.parse_known_args()
 
 if args.config:
     with open(args.config, "r") as fp:

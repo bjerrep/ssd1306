@@ -15,7 +15,6 @@ class CpuTemp(ThreadedPoster):
 
     def __init__(self, size):
         super(CpuTemp, self).__init__(size, self.get_cpu_load_and_redraw)
-        self.image = self.get_new_image()
 
     def get_cpu_load_and_redraw(self):
         xc = self.width / 2
@@ -32,7 +31,8 @@ class CpuTemp(ThreadedPoster):
             try:
                 ret = subprocess.check_output(
                     ['/opt/vc/bin/vcgencmd measure_temp'], shell=True)
-                temperature = float(re.search("\d+\.\d+", ret).group(0))
+                temperature = float(re.search("\d+\.\d+",
+                                    ret.decode('utf8')).group(0))
                 widgets.meter(draw, xc - r, yc - r, xc + r, yc + r,
                               40, 80, temperature)
             except:
@@ -44,15 +44,11 @@ class CpuTemp(ThreadedPoster):
             self.new_image_is_ready()
             time.sleep(2)
 
-    def get_image(self):
-        return self.image
-
 
 class CpuLoad(ThreadedPoster):
 
     def __init__(self, size):
         super(CpuLoad, self).__init__(size, self.get_cpu_load_and_redraw)
-        self.image = self.get_new_image()
 
     def get_cpu_load_and_redraw(self):
         bar_height = self.height - widgets.title_height - bottom_margin - 3
@@ -77,17 +73,13 @@ class CpuLoad(ThreadedPoster):
             x = bar_margin
 
             for cpu in percentages:
-                cpu_height = bar_height * (cpu / 100.0)
                 y2 = self.height - bottom_margin
                 widgets.vertical_bar(draw,
                                      x, y2 - bar_height - 1,
-                                     x + bar_width, y2, y2 - cpu_height)
+                                     x + bar_width, y2, cpu / 100.0)
                 x += width_cpu
 
             self.image = image
             del image
             del draw
             self.new_image_is_ready()
-
-    def get_image(self):
-        return self.image

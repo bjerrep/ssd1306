@@ -32,6 +32,9 @@ import time
 
 from PIL import Image, ImageDraw
 
+active_device = None
+
+"""
 try:
     import oled.device
     import oled.render
@@ -41,19 +44,20 @@ try:
     device = oled.device.sh1106(serial_interface)
 except:
     print('ssd1306 interface not available')
-
+"""
 
 # The Poster base class. Can be used for responsive and/or static posters.
 #
 class Poster(object):
     def __init__(self, size):
         self.width, self.height = size
+        self.image = self.get_new_image()
 
     def size(self):
         return self.width, self.height
 
     def get_new_image(self):
-        return Image.new('1', self.size())
+        return Image.new(active_device.mode, self.size())
 
     def get_new_image_and_canvas(self):
         image = self.get_new_image()
@@ -70,6 +74,9 @@ class Poster(object):
 
     def set_redraw_lock(self, lock):
         pass
+    
+    def get_image(self):
+        return self.image
 
 
 # A threaded Poster version. Used when the Poster uses long running calls
@@ -116,9 +123,12 @@ class ThreadedPoster(Poster):
 #
 class Sequenser(threading.Thread):
 
-    def __init__(self, size, get_next_poster, destination_file=None):
+    def __init__(self, device, get_next_poster, destination_file=None):
+        global active_device
+        
         threading.Thread.__init__(self)
-        self.size = size
+        active_device = device
+        self.size = device.size
         self.get_next_poster = get_next_poster
         self.destination_file = destination_file
         self.terminated = False
@@ -133,6 +143,7 @@ class Sequenser(threading.Thread):
         self.pixel_step = 1
         self.sleep_per_step = 0.03
 
+    def activate(self):
         self.start()
         threading.Thread(target=self._slide_event_thread).start()
 
@@ -144,7 +155,7 @@ class Sequenser(threading.Thread):
     # scrolling. Its easy to get hit by performance bottlenecks when
     # persuing 'the perfect scroll' on a r-pi.
     #
-    def set_timing(self, display_time, pixel_step, sleep_per_step):
+    def configure_slide(self, display_time, pixel_step, sleep_per_step):
         self.poster_display_time = display_time
         self.pixel_step = pixel_step
         self.sleep_per_step = sleep_per_step
@@ -226,5 +237,5 @@ class Sequenser(threading.Thread):
             if self.destination_file:
                 image.save(self.destination_file)
             else:
-                device.display_v2(image)
+                active_device.display(image)
             time.sleep(0.001)

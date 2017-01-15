@@ -8,7 +8,6 @@ import font
 class FreeAndSwap(ThreadedPoster):
     def __init__(self, size):
         super(FreeAndSwap, self).__init__(size, self.get_clock)
-        self.image = self.get_new_image()
 
     def get_clock(self):
         x = self.width / 2
@@ -16,7 +15,7 @@ class FreeAndSwap(ThreadedPoster):
 
         while not self.is_terminated():
             ret = subprocess.check_output(
-                'free -h | xargs | awk \'{print $10 " " $16}\'', shell=True)
+                'free -h | xargs | awk \'{print $13 " " $16}\'', shell=True)
             mem_free, swap_used = ret.split()
 
             image, draw = self.get_new_image_and_canvas()
@@ -25,14 +24,11 @@ class FreeAndSwap(ThreadedPoster):
             pos = font.text(draw, (left, pos[1]),
                             'Free:', 'small')
             pos = font.text(draw, (self.width - 5, pos[1] - 3),
-                            mem_free, 'normal', 'right')
+                            mem_free.decode('utf-8'), 'normal', 'right')
             pos = font.text(draw, (left, pos[1] - 3),
                             'Swapped:', 'small')
             pos = font.text(draw, (self.width - 5, pos[1] - 3),
-                            swap_used, 'normal', 'right')
+                            swap_used.decode('utf-8'), 'normal', 'right')
             self.image = image
             self.new_image_is_ready()
             time.sleep(1.8)
-
-    def get_image(self):
-        return self.image

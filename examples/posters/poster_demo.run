@@ -9,8 +9,8 @@
 cd /root/ssd1306
 
 # development phase
-git pull
-/usr/bin/python2 setup.py install
+#git pull
+#/usr/bin/python2 setup.py install
 
 cd examples
-python2 poster_demo.py
+PYTHONPATH=.. python2 poster_demo.py --display sh1106 --interface spi --spi-bus-speed=32000000

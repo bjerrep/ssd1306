@@ -11,7 +11,6 @@ import font
 class Summary(ThreadedPoster):
     def __init__(self, size):
         super(Summary, self).__init__(size, self.refresh)
-        self.image = self.get_new_image()
 
     def refresh(self):
         x = self.width / 2
@@ -43,9 +42,7 @@ class Summary(ThreadedPoster):
 
     def get_ip_address(self, ifname):
         s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        ifaddr = fcntl.ioctl(s.fileno(), 0x8915,
-                             struct.pack('256s', ifname[:15]))[20:24]
+        ifaddr = fcntl.ioctl(
+            s.fileno(), 0x8915,
+            struct.pack('256s', ifname[:15].encode('utf-8')))[20:24]
         return socket.inet_ntoa(ifaddr)
-
-    def get_image(self):
-        return self.image

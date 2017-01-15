@@ -6,9 +6,24 @@ import font
 title_height = font.font_height('small') + 4
 
 
-def vertical_bar(draw, x1, y1, x2, y2, yh):
+def vertical_bar(draw, x1, y1, x2, y2, value):
+    if value < 0:
+        value = 0
+    elif value > 1:
+        value = 1
+    endp = y2 - (y2 - y1) * value
     draw.rectangle((x1, y1) + (x2, y2), 'black', 'white')
-    draw.rectangle((x1, yh) + (x2, y2), 'white', 'white')
+    draw.rectangle((x1, endp) + (x2, y2), 'white', 'white')
+
+
+def horizontal_bar(draw, x1, y1, x2, y2, value):
+    if value < 0:
+        value = 0
+    elif value > 1:
+        value = 1
+    endp = x1 + (x2 - x1) * value
+    draw.rectangle((x1, y1) + (x2, y2), 'black', 'white')
+    draw.rectangle((x1, y1) + (endp, y2), 'white', 'white')
 
 
 def meter(draw, x1, y1, x2, y2, min, max, value):
